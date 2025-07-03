@@ -128,10 +128,10 @@ const sendTokenResponse = (user, statusCode, res) => {
         .status(statusCode) // Set the HTTP status code (e.g., 201 for signup, 200 for login)
         .cookie('token', token, options) // Set the JWT as an HTTP-only cookie
         .json({
-            success: true, // Indicate success in the response body
-            token,         // Include token in the response body
-            role: user.role, // Include user role
-            user: {        // Include basic user details
+            success: true, 
+            token,        
+            role: user.role,
+            user: {        
                 id: user._id,
                 name: user.name,
                 email: user.email,

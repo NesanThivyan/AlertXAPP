@@ -7,6 +7,6 @@ const router = express.Router();
 router.post('/user/medical', createMedicalDetails);
 
 // Optional: GET /api/user/medical/:id
-router.get('/user/medical/:id', getMedicalDetailsById);
+router.get('/user/:id', getMedicalDetailsById);
 
 export default router;

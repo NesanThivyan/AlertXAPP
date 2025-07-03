@@ -1,57 +1,46 @@
 import Chat from "../models/chat.model.js";
 
-/* POST /api/chat  – create */
+// Create conversation ID helper
+const generateConversationId = (userId, hospitalId) => {
+  return [userId, hospitalId].sort().join('_');
+};
+
+/* POST /api/chat - create message */
 export const sendMessage = async (req, res) => {
   try {
-    const { sender, text } = req.body;
-    const message = await Chat.create({ sender, text });
+    const { sender, senderType, receiver, receiverType, text } = req.body;
+    
+    const conversationId = generateConversationId(sender, receiver);
+    
+    const message = await Chat.create({
+      sender,
+      senderType,
+      receiver,
+      receiverType,
+      text,
+      conversationId
+    });
+    
+    // Emit real-time event here if using Socket.io
     res.status(201).json(message);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
 
-/* GET /api/chat  – list all */
+/* GET /api/chat - get conversation */
 export const getMessages = async (req, res) => {
   try {
-    const messages = await Chat.find().sort({ createdAt: 1 });
+    const { userId, hospitalId } = req.query;
+    
+    if (!userId || !hospitalId) {
+      return res.status(400).json({ error: "Missing conversation parameters" });
+    }
+    
+    const conversationId = generateConversationId(userId, hospitalId);
+    const messages = await Chat.find({ conversationId }).sort({ createdAt: 1 });
+    
     res.json(messages);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-/* PATCH /api/chat/:id  – update text */
-export const updateMessage = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { text } = req.body;
-
-    const updated = await Chat.findByIdAndUpdate(
-      id,
-      { text },
-      { new: true, runValidators: true }
-    );
-
-    if (!updated) {
-      return res.status(404).json({ error: "Message not found" });
-    }
-    res.json(updated);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-};
-
-/* DELETE /api/chat/:id  – remove message */
-export const deleteMessage = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const deleted = await Chat.findByIdAndDelete(id);
-    if (!deleted) {
-      return res.status(404).json({ error: "Message not found" });
-    }
-    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

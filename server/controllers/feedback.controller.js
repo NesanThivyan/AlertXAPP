@@ -5,7 +5,7 @@ export const createFeedback = async (req, res) => {
   try {
     const feedback = await Feedback.create({
       ...req.body,
-      user: req.user._id // assumes user is authenticated
+      user: req.user._id 
     });
     return res.status(201).json({ success: true, data: feedback });
   } catch (err) {

@@ -1,26 +1,41 @@
+// backend/routes/booking.routes.js
 import { Router } from 'express';
 import { protect, isAdmin } from '../middleware/auth.middleware.js';
 import {
-  createBooking,
-  updateBooking,
-  deleteBooking,
-  getAllBookings,
-  getBookingById
+  createBooking,         // user creates a booking
+  updateBooking,         // admin edits any booking field
+  updateBookingStatus,   // admin sets status (pending, en‑route, done…)
+  acceptBooking,         // admin ACCEPTS booking → sends email
+  deleteBooking,         // admin deletes a booking
+  getAllBookings,        // admin list
+  getBookingById         // admin details view
 } from '../controllers/booking.controller.js';
 
 const router = Router();
 
-// Create a new booking
-router.post('/', protect, createBooking);
+/* ────────────────────────  USER  ──────────────────────── */
 
-// Update a specific booking (by ID)
-router.put('/:id', protect, updateBooking);
+// POST /api/bookings
+router.post('/', protect, createBooking);          // create new booking
 
-// Delete a specific booking (by ID)
-router.delete('/:id', protect, deleteBooking);
+/* ────────────────────────  ADMIN  ──────────────────────── */
 
-// Admin routes
-router.get('/', protect, isAdmin, getAllBookings);        // GET /api/bookings
-router.get('/:id', protect, isAdmin, getBookingById);     // GET /api/bookings/:id
+// PUT /api/bookings/:id
+router.put('/:id', protect, isAdmin, updateBooking);          // general edit
+
+// PUT /api/bookings/:id/status
+router.put('/:id/status', protect, isAdmin, updateBookingStatus); // change status only
+
+// PUT /api/bookings/:id/accept
+router.put('/:id/accept', protect, isAdmin, acceptBooking);   // accept + email user
+
+// DELETE /api/bookings/:id
+router.delete('/:id', protect, isAdmin, deleteBooking);       // delete booking
+
+// GET /api/bookings
+router.get('/', protect, isAdmin, getAllBookings);            // list all
+
+// GET /api/bookings/:id
+router.get('/:id', protect, isAdmin, getBookingById);         // single booking
 
 export default router;

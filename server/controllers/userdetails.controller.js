@@ -66,3 +66,35 @@ export const updateUserDetails = async (req, res) => {
         res.status(500).json({ success: false, message: 'Server Error updating user details', error: error.message });
     }
 };
+// @desc    Get full user details (for admin)
+// @route   GET /api/users/:id/details
+// @access  Private (Admin only)
+export const getUserDetailsByAdmin = async (req, res) => {
+    try {
+        const userId = req.params.id;
+
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        res.status(200).json({
+            success: true,
+            user: {
+                id: user._id,
+                email: user.email,
+                name: user.name,
+                age: user.age,
+                place: user.place,
+                phone: user.phone,
+                nic: user.nic,
+                work: user.work,
+                // You can include more fields like guardian details, etc.
+            }
+        });
+    } catch (error) {
+        console.error("Admin failed to fetch user details:", error);
+        res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+};
