@@ -143,6 +143,31 @@ export const updateBookingStatus = async (req, res) => {
     // Emit realtime update
     notifyBookingStatusUpdate(booking.user._id, booking);
 
+    // Send email on accepted or rejected
+    if (status === 'accepted' || status === 'rejected') {
+      try {
+        if (status === 'accepted') {
+          await sendBookingConfirmationEmail({
+            to: booking.user.email,
+            username: booking.user.name,
+            bookingId: booking._id,
+            date: booking.date || new Date(),
+          });
+        } else if (status === 'rejected') {
+          // You can create a separate function or use the same one with different content
+          await sendBookingRejectionEmail({
+            to: booking.user.email,
+            username: booking.user.name,
+            bookingId: booking._id,
+            date: booking.date || new Date(),
+          });
+        }
+      } catch (emailError) {
+        console.error('Email send failed:', emailError);
+        // Optionally, inform client that update succeeded but email failed
+      }
+    }
+
     return res.json({ success: true, data: booking });
   } catch (error) {
     console.error('updateBookingStatus error:', error);
@@ -157,50 +182,50 @@ export const updateBookingStatus = async (req, res) => {
 // @desc    Accept booking (admin) → send confirmation email to user
 // @route   PUT /api/bookings/:id/accept
 // @access  Private/Admin
-export const acceptBooking = async (req, res) => {
-  try {
-    const { id } = req.params;
+// export const acceptBooking = async (req, res) => {
+//   try {
+//     const { id } = req.params;
 
-    const booking = await Booking.findById(id).populate('user', 'name email');
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found.' });
-    }
+//     const booking = await Booking.findById(id).populate('user', 'name email');
+//     if (!booking) {
+//       return res.status(404).json({ success: false, message: 'Booking not found.' });
+//     }
 
-    // Already accepted?
-    if (booking.status === 'accepted') {
-      return res.json({ success: true, message: 'Booking already accepted.', data: booking });
-    }
+//     // Already accepted?
+//     if (booking.status === 'accepted') {
+//       return res.json({ success: true, message: 'Booking already accepted.', data: booking });
+//     }
 
-    booking.status = 'accepted';
-    await booking.save();
+//     booking.status = 'accepted';
+//     await booking.save();
 
-    // Notify sockets
-    notifyBookingStatusUpdate(booking.user._id, booking);
+//     // Notify sockets
+//     notifyBookingStatusUpdate(booking.user._id, booking);
 
-    // Generate token (expires in 1h)
-    const token = jwt.sign({ bookingId: booking._id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
-    });
+//     // Generate token (expires in 1h)
+//     const token = jwt.sign({ bookingId: booking._id }, process.env.JWT_SECRET, {
+//       expiresIn: '1h',
+//     });
 
-    // Send confirmation email
-    await sendBookingConfirmationEmail({
-      to: booking.user.email,
-      bookingId: booking._id,
-      token,
-    });
+//     // Send confirmation email
+//     await sendBookingConfirmationEmail({
+//       to: booking.user.email,
+//       bookingId: booking._id,
+//       token,
+//     });
 
-    return res.json({
-      success: true,
-      message: 'Booking accepted and confirmation email sent.',
-      data: booking,
-    });
-  } catch (error) {
-    console.error('acceptBooking error:', error);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Failed to accept booking.', error: error.message });
-  }
-};
+//     return res.json({
+//       success: true,
+//       message: 'Booking accepted and confirmation email sent.',
+//       data: booking,
+//     });
+//   } catch (error) {
+//     console.error('acceptBooking error:', error);
+//     return res
+//       .status(500)
+//       .json({ success: false, message: 'Failed to accept booking.', error: error.message });
+//   }
+// };
 
 /* ─────────────────────────  USER – CLICK EMAIL LINK  ───────────────────────── */
 
@@ -264,16 +289,28 @@ export const deleteBooking = async (req, res) => {
   }
 };
 
+// controllers/bookingController.js
+// import Booking from '../models/booking.model.js';
+
 export const getAllBookings = async (_req, res) => {
   try {
-    const bookings = await Booking.find().populate('user', 'name email');
-    res.json({ success: true, data: bookings });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: 'Failed to fetch.', error: error.message });
+    const bookings = await Booking.find()
+      .populate({ path: 'user', select: 'name email' })        // client info
+      .populate({ path: 'caretakerId', select: 'name specialization rate' }) // caretaker info
+      .sort({ createdAt: -1 })  // newest first
+      .lean();                  // plain JS objects (faster)
+
+    // 🔑   Return the array directly – matches frontend `res.data`
+    res.status(200).json(bookings);
+  } catch (err) {
+    console.error('getAllBookings error:', err);
+    res.status(500).json({
+      message: 'Failed to fetch bookings.',
+      error: err.message,
+    });
   }
 };
+
 
 export const getBookingById = async (req, res) => {
   try {

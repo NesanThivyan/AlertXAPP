@@ -1,41 +1,33 @@
-// backend/routes/booking.routes.js
 import { Router } from 'express';
 import { protect, isAdmin } from '../middleware/auth.middleware.js';
 import {
-  createBooking,         // user creates a booking
-  updateBooking,         // admin edits any booking field
-  updateBookingStatus,   // admin sets status (pending, en‑route, done…)
-  acceptBooking,         // admin ACCEPTS booking → sends email
-  deleteBooking,         // admin deletes a booking
-  getAllBookings,        // admin list
-  getBookingById         // admin details view
+  createBooking,
+  updateBooking,
+  updateBookingStatus,
+  // acceptBooking,   // no longer needed separately
+  deleteBooking,
+  getAllBookings,
+  getBookingById,
 } from '../controllers/booking.controller.js';
 
 const router = Router();
 
-/* ────────────────────────  USER  ──────────────────────── */
+// USER: create booking
+router.post('/', protect, createBooking);
 
-// POST /api/bookings
-router.post('/', protect, createBooking);          // create new booking
+// ADMIN: general edit booking
+router.put('/:id', protect, isAdmin, updateBooking);
 
-/* ────────────────────────  ADMIN  ──────────────────────── */
+// ADMIN: update booking status (accepted, rejected, completed, cancelled)
+router.put('/:id/status', protect, isAdmin, updateBookingStatus);
 
-// PUT /api/bookings/:id
-router.put('/:id', protect, isAdmin, updateBooking);          // general edit
+// ADMIN: delete booking
+router.delete('/:id', protect, isAdmin, deleteBooking);
 
-// PUT /api/bookings/:id/status
-router.put('/:id/status', protect, isAdmin, updateBookingStatus); // change status only
+// ADMIN: list all bookings
+router.get('/', protect, isAdmin, getAllBookings);
 
-// PUT /api/bookings/:id/accept
-router.put('/:id/accept', protect, isAdmin, acceptBooking);   // accept + email user
-
-// DELETE /api/bookings/:id
-router.delete('/:id', protect, isAdmin, deleteBooking);       // delete booking
-
-// GET /api/bookings
-router.get('/', protect, isAdmin, getAllBookings);            // list all
-
-// GET /api/bookings/:id
-router.get('/:id', protect, isAdmin, getBookingById);         // single booking
+// ADMIN: get booking by id
+router.get('/:id', protect, isAdmin, getBookingById);
 
 export default router;

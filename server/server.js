@@ -97,12 +97,12 @@ mongoose
     useUnifiedTopology: true,
   })
   .then(() => {
-    console.log('✅ MongoDB connected');
+    console.log('MongoDB connected');
     httpServer.listen(PORT, () =>
-      console.log(`🚀 Server & Socket.IO running on port ${PORT}`)
+      console.log(`Server & Socket.IO running on port ${PORT}`)
     );
   })
   .catch(err => {
-    console.error('❌ DB connection error:', err.message);
+    console.error('DB connection error:', err.message);
     process.exit(1);
   });

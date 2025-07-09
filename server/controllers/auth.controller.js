@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 
 // @desc    Register user
 // @route   POST /api/auth/signup
-// @access  Public
+// @access  Publicc
 export const register = async (req, res) => {
     try {
         const { name, email, password, role } = req.body;

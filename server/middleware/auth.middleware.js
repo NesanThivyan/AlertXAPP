@@ -47,3 +47,9 @@ export const isSuperAdmin = (req, res, next) => {
     res.status(403).json({ message: 'Super admin access denied' });
   }
 };
+
+export const isCaretaker = (req, res, next) => {
+  if (req.user?.role === 'caretaker') return next();
+  res.status(403).json({ message: 'Caretaker access denied' });
+};
+;

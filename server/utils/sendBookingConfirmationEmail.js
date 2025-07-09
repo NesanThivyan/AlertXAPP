@@ -1,44 +1,64 @@
-// server/utils/sendBookingConfirmationEmail.js
+// utils/sendConfirmationMail.js
+// -----------------------------------------------------------------------------
+// Re‑usable Nodemailer helper for booking‑confirmation e‑mails
+// -----------------------------------------------------------------------------
+// 1️⃣  Requires these environment variables:
+//     EMAIL_USER      – the Gmail address to send from
+//     EMAIL_APP_PASS  – 16‑char Gmail App Password (2‑Step Verification enabled)
+// 2️⃣  Import this function and call `await sendConfirmationMail(to, booking)`
+// 3️⃣  The module verifies the SMTP connection once on first import
+
 import nodemailer from 'nodemailer';
 
-/**
- * Sends an email to the user confirming their booking.
- * @param {Object} opts
- * @param {string} opts.to         – recipient email
- * @param {string} opts.username   – display name
- * @param {string} opts.bookingId  – booking reference
- * @param {Date}   opts.date       – booking date/time
- */
-export default async function sendBookingConfirmationEmail({
-  to,
-  username,
-  bookingId,
-  date,
-}) {
-  // 1. Transporter
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: process.env.SMTP_SECURE === 'true', // true for 465
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
+// -----------------------------------------------------------------------------
+// Create a single shared transporter
+// -----------------------------------------------------------------------------
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_APP_PASS,
+  },
+});
 
-  // 2. Email content
+// Verify SMTP connection at startup — helpful in dev & CI
+transporter.verify()
+  .then(() => console.log('📧  Gmail SMTP ready'))
+  .catch((err) => console.error('❌  Gmail SMTP error:', err));
+
+// -----------------------------------------------------------------------------
+// Helper to send a booking‑confirmation e‑mail
+// -----------------------------------------------------------------------------
+/**
+ * Send a confirmation e‑mail when a booking is accepted.
+ *
+ * @param {string} to       Recipient e‑mail address
+ * @param {object} booking  Booking document
+ *   – Must include at least `_id` and `status`. If `booking.user.name` exists
+ *     it will be used in the greeting.
+ */
+export default async function sendConfirmationMail(to, booking) {
+  const namePart = booking?.user?.name ? ` ${booking.user.name}` : '';
+
   const mailOptions = {
-    from: `"AlertX" <${process.env.SMTP_FROM}>`,
+    from: `"AlertX" <${process.env.EMAIL_USER}>`,
     to,
-    subject: 'Your ambulance booking is confirmed 🚑',
+    subject: 'Your Booking is Confirmed!',
     html: `
-      <p>Hi ${username},</p>
-      <p>Your booking <strong>#${bookingId}</strong> has been confirmed for <strong>${date.toLocaleString()}</strong>.</p>
-      <p>We’ll keep you updated on any status changes.</p>
-      <p style="margin-top:2rem;">Stay safe,<br/>AlertX Team</p>
+      <h3>Hello${namePart},</h3>
+      <p>Your booking has been <strong>confirmed</strong>.</p>
+      <p><b>Booking ID:</b> ${booking._id}</p>
+      <p><b>Status:</b> ${booking.status}</p>
+      <p>Thank you for using AlertX!</p>
     `,
   };
 
-  // 3. Send
-  await transporter.sendMail(mailOptions);
+  try {
+    await transporter.sendMail(mailOptions);
+    alert(`📧  Confirmation mail sent → ${to}`);
+  } catch (err) {
+    alert('❌  Failed to send confirmation mail:', err);
+    throw err; // re‑throw so callers can handle it
+  }
 }
+
