@@ -1,134 +1,125 @@
-import Booking from '../models/booking.model.js';
-import { notifyBookingStatusUpdate } from '../server.js';      // emits to user + admin rooms
-import sendBookingConfirmationEmail from '../utils/sendBookingConfirmationEmail.js';
+// controllers/booking.controller.js
+import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
+import Booking from '../models/booking.model.js';
+import Ambulance from '../models/ambulance.model.js';       // if you need to query it
+import {
+  notifyBookingStatusUpdate
+} from '../server.js';
+import sendBookingConfirmationEmail   from '../utils/sendBookingConfirmationEmail.js';
+import sendBookingRejectionEmail      from '../utils/sendBookingRejectionEmail.js';
 
-/**
- * Booking Controller
- * Handles creating, updating, deleting, and fetching bookings.
- * Realtime: uses Socket.IO events via notifyBookingStatusUpdate helper.
- */
+/* ────────── util ────────── */
+const isNonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
 
-/* ─────────────────────────  USER – CREATE  ───────────────────────── */
+/* validate and normalise incoming booking body */
+function validateBooking(body) {
+  const {
+    pickupLocation, dropoffLocation, emergencyType,
+    patientName, patientAge, patientCondition,
+    contactNumber, date, hospital, name,
+  } = body;
 
-// @desc    Create a new booking (user)
-// @route   POST /api/bookings
-// @access  Private (User)
+  /* text fields */
+  if (![ pickupLocation, dropoffLocation, emergencyType, patientName,
+         patientCondition, contactNumber, hospital, name ]
+        .every(isNonEmpty)) {
+    return { ok: false, message: 'All text fields are required.' };
+  }
+
+  const ageNum = Number(patientAge);
+  if (!Number.isFinite(ageNum) || ageNum <= 0) {
+    return { ok: false, message: 'patientAge must be a positive number.' };
+  }
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate)) {
+    return { ok: false, message: 'date must be a valid ISO string.' };
+  }
+
+  return {
+    ok: true,
+    data: {
+      pickupLocation, dropoffLocation, emergencyType,
+      patientName, patientAge: ageNum, patientCondition,
+      contactNumber, date: parsedDate, hospital, name,
+    },
+  };
+}
+
+/* ────────── USER – CREATE ────────── */
 export const createBooking = async (req, res) => {
-  console.log('BookingController: createBooking body →', req.body);
-
   try {
-    const {
-      pickupLocation,
-      dropoffLocation,
-      emergencyType,
-      patientName,
-      patientAge,
-      patientCondition,
-      contactNumber,
-      date,
-      hospital,
-      name, // bookingName from frontend
-    } = req.body;
+    const check = validateBooking(req.body);
+    if (!check.ok)
+      return res.status(400).json({ success: false, message: check.message });
 
-    // Validate required fields
-    if (
-      !pickupLocation ||
-      !dropoffLocation ||
-      !emergencyType ||
-      !patientName ||
-      !patientAge ||
-      !patientCondition ||
-      !contactNumber ||
-      !date ||
-      !hospital ||
-      !name
-    ) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Please provide all required fields.' });
-    }
-
-    // Authenticated user
     const userId = req.user?._id;
-    if (!userId) {
+    if (!mongoose.Types.ObjectId.isValid(userId))
       return res
         .status(401)
         .json({ success: false, message: 'User not authenticated.' });
-    }
 
-    // Create booking document
     const booking = await Booking.create({
+      ...check.data,
       user: userId,
-      pickupLocation,
-      dropoffLocation,
-      emergencyType,
-      patientName,
-      patientAge,
-      patientCondition,
-      contactNumber,
-      date,
-      hospital,
-      name,
       status: 'pending',
     });
 
-    // Populate user for nice payloads
-    const populatedBooking = await Booking.findById(booking._id).populate(
-      'user',
-      'name email'
-    );
+    const populatedBooking = await Booking.findById(booking._id)
+      .populate('user', 'name email');
 
-    // Socket.IO instance
-    const io = req.app.get('io');
-
-    // Notify all admins of NEW booking request
-    io.to('adminNotifications').emit('newBookingRequest', populatedBooking);
-
-    // Notify user + admins of current status via helper ("pending")
+    /* realtime + email */
+    const io           = req.app.get('io');
+    if (io) io.to('adminNotifications').emit('newBookingRequest', populatedBooking);
     notifyBookingStatusUpdate(userId, populatedBooking);
 
-    // SEND BOOKING CONFIRMATION EMAIL TO USER
     if (populatedBooking.user?.email) {
-      try {
-        await sendBookingConfirmationEmail({
-          to: populatedBooking.user.email,
-          username: populatedBooking.user.name,
-          bookingId: populatedBooking._id,
-          date: new Date(populatedBooking.date),
-        });
-      } catch (emailError) {
-        console.error('Error sending booking confirmation email:', emailError);
-        // Optionally continue without failing the booking creation
-      }
+      sendBookingConfirmationEmail({
+        to:        populatedBooking.user.email,
+        username:  populatedBooking.user.name,
+        bookingId: populatedBooking._id,
+        date:      populatedBooking.date,
+      }).catch(console.error);
     }
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       message: 'Booking request created. Awaiting admin approval.',
-      data: populatedBooking,
+      data:    populatedBooking,
     });
-  } catch (error) {
-    console.error('createBooking error:', error);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Failed to create booking.', error: error.message });
+  } catch (err) {
+    console.error('createBooking →', err);
+    res.status(500).json({ success: false, message: 'Failed to create booking.', error: err.message });
   }
 };
 
-/* ─────────────────────────  ADMIN – STATUS UPDATE  ───────────────────────── */
+/* ────────── ADMIN – GET ALL ────────── */
+export const getAllBookings = async (_req, res) => {
+  try {
+    const bookings = await Booking.find()
+      .populate({ path: 'user',               select: 'name email' })
+      .populate({ path: 'assignedAmbulance',  select: 'plate driver status' })
+      .sort({ createdAt: -1 })
+      .lean();
 
-// @desc    Update booking status (admin)
-// @route   PUT /api/bookings/:id/status
-// @access  Private/Admin
+    res.status(200).json({ success: true, data: bookings });
+  } catch (err) {
+    console.error('getAllBookings →', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch bookings.', error: err.message });
+  }
+};
+
+/* ────────── ADMIN – STATUS UPDATE ────────── */
+
 export const updateBookingStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    if (!['accepted', 'rejected', 'completed', 'cancelled'].includes(status)) {
+    const allowed = ['accepted', 'rejected', 'completed', 'cancelled'];
+    if (!allowed.includes(status))
       return res.status(400).json({ success: false, message: 'Invalid status value.' });
-    }
 
     const booking = await Booking.findByIdAndUpdate(
       id,
@@ -136,191 +127,75 @@ export const updateBookingStatus = async (req, res) => {
       { new: true, runValidators: true }
     ).populate('user', 'name email');
 
-    if (!booking) {
+    if (!booking)
       return res.status(404).json({ success: false, message: 'Booking not found.' });
-    }
 
-    // Emit realtime update
     notifyBookingStatusUpdate(booking.user._id, booking);
 
-    // Send email on accepted or rejected
-    if (status === 'accepted' || status === 'rejected') {
-      try {
-        if (status === 'accepted') {
-          await sendBookingConfirmationEmail({
-            to: booking.user.email,
-            username: booking.user.name,
-            bookingId: booking._id,
-            date: booking.date || new Date(),
-          });
-        } else if (status === 'rejected') {
-          // You can create a separate function or use the same one with different content
-          await sendBookingRejectionEmail({
-            to: booking.user.email,
-            username: booking.user.name,
-            bookingId: booking._id,
-            date: booking.date || new Date(),
-          });
-        }
-      } catch (emailError) {
-        console.error('Email send failed:', emailError);
-        // Optionally, inform client that update succeeded but email failed
+    if (booking.user?.email) {
+      if (status === 'accepted') {
+        await sendConfirmationMail(booking.user.email, booking)
+          .catch((e) => console.error('Mail send failed:', e));
+      } else if (status === 'rejected') {
+        await sendBookingRejectionEmail({
+          to: booking.user.email,
+          username: booking.user.name,
+          bookingId: booking._id,
+          date: booking.date,
+        }).catch((e) => console.error('Mail send failed:', e));
       }
     }
 
-    return res.json({ success: true, data: booking });
-  } catch (error) {
-    console.error('updateBookingStatus error:', error);
-    return res
-      .status(500)
-      .json({ success: false, message: 'Failed to update status.', error: error.message });
+    res.json({ success: true, data: booking });
+  } catch (err) {
+    console.error('updateBookingStatus error →', err);
+    res.status(500).json({ success: false, message: 'Failed to update status.', error: err.message });
   }
 };
 
-/* ─────────────────────────  ADMIN – ACCEPT + EMAIL  ───────────────────────── */
 
-// @desc    Accept booking (admin) → send confirmation email to user
-// @route   PUT /api/bookings/:id/accept
-// @access  Private/Admin
-// export const acceptBooking = async (req, res) => {
-//   try {
-//     const { id } = req.params;
 
-//     const booking = await Booking.findById(id).populate('user', 'name email');
-//     if (!booking) {
-//       return res.status(404).json({ success: false, message: 'Booking not found.' });
-//     }
-
-//     // Already accepted?
-//     if (booking.status === 'accepted') {
-//       return res.json({ success: true, message: 'Booking already accepted.', data: booking });
-//     }
-
-//     booking.status = 'accepted';
-//     await booking.save();
-
-//     // Notify sockets
-//     notifyBookingStatusUpdate(booking.user._id, booking);
-
-//     // Generate token (expires in 1h)
-//     const token = jwt.sign({ bookingId: booking._id }, process.env.JWT_SECRET, {
-//       expiresIn: '1h',
-//     });
-
-//     // Send confirmation email
-//     await sendBookingConfirmationEmail({
-//       to: booking.user.email,
-//       bookingId: booking._id,
-//       token,
-//     });
-
-//     return res.json({
-//       success: true,
-//       message: 'Booking accepted and confirmation email sent.',
-//       data: booking,
-//     });
-//   } catch (error) {
-//     console.error('acceptBooking error:', error);
-//     return res
-//       .status(500)
-//       .json({ success: false, message: 'Failed to accept booking.', error: error.message });
-//   }
-// };
-
-/* ─────────────────────────  USER – CLICK EMAIL LINK  ───────────────────────── */
-
-// @desc    User confirms booking via emailed link
-// @route   GET /api/bookings/confirm/:token
-// @access  Public
-export const confirmBooking = async (req, res) => {
+/* ────────── ADMIN – CRUD HELPERS ────────── */
+export const getBookingById = async (req, res) => {
   try {
-    const { token } = req.params;
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const booking = await Booking.findById(req.params.id)
+      .populate('user', 'name email')
+      .populate('assignedAmbulance', 'plate driver status');
 
-    const booking = await Booking.findById(decoded.bookingId).populate('user', 'name email');
-    if (!booking) {
+    if (!booking)
       return res.status(404).json({ success: false, message: 'Booking not found.' });
-    }
 
-    booking.userConfirmed = true;
-    await booking.save();
-
-    // Notify sockets
-    notifyBookingStatusUpdate(booking.user._id, booking);
-
-    return res.json({ success: true, message: 'Booking confirmed.', data: booking });
-  } catch (error) {
-    console.error('confirmBooking error:', error);
-    return res
-      .status(400)
-      .json({ success: false, message: 'Invalid or expired token.', error: error.message });
+    res.json({ success: true, data: booking });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch.', error: err.message });
   }
 };
-
-/* ─────────────────────────  REMAINING CRUD  ───────────────────────── */
 
 export const updateBooking = async (req, res) => {
   try {
-    const booking = await Booking.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const booking = await Booking.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
     if (!booking)
       return res.status(404).json({ success: false, message: 'Booking not found.' });
+
     res.json({ success: true, data: booking });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: 'Failed to update.', error: error.message });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update.', error: err.message });
   }
 };
 
 export const deleteBooking = async (req, res) => {
   try {
-    const { id } = req.params;
-    const booking = await Booking.findByIdAndDelete(id);
+    const booking = await Booking.findByIdAndDelete(req.params.id);
     if (!booking)
       return res.status(404).json({ success: false, message: 'Booking not found.' });
+
     res.json({ success: true, message: 'Booking deleted.' });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: 'Failed to delete.', error: error.message });
-  }
-};
-
-// controllers/bookingController.js
-// import Booking from '../models/booking.model.js';
-
-export const getAllBookings = async (_req, res) => {
-  try {
-    const bookings = await Booking.find()
-      .populate({ path: 'user', select: 'name email' })        // client info
-      .populate({ path: 'caretakerId', select: 'name specialization rate' }) // caretaker info
-      .sort({ createdAt: -1 })  // newest first
-      .lean();                  // plain JS objects (faster)
-
-    // 🔑   Return the array directly – matches frontend `res.data`
-    res.status(200).json(bookings);
   } catch (err) {
-    console.error('getAllBookings error:', err);
-    res.status(500).json({
-      message: 'Failed to fetch bookings.',
-      error: err.message,
-    });
-  }
-};
-
-
-export const getBookingById = async (req, res) => {
-  try {
-    const booking = await Booking.findById(req.params.id).populate('user', 'name email');
-    if (!booking)
-      return res.status(404).json({ success: false, message: 'Booking not found.' });
-    res.json({ success: true, data: booking });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: 'Failed to fetch.', error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to delete.', error: err.message });
   }
 };

@@ -10,6 +10,9 @@ import morgan from 'morgan';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 
+import ambulanceRoutes from './routes/ambulance.routes.js';
+
+
 /* ---------- env ---------- */
 dotenv.config();
 const PORT        = process.env.PORT       || 5000;
@@ -76,16 +79,19 @@ import hospitalRoutes from './routes/hospital.routes.js';
 import feedbackRoutes from './routes/feedback.routes.js';
 import chatRoutes     from './routes/chat.routes.js';
 import medicalRoutes  from './routes/medical.routes.js';
+import caretakerAdminRoutes from './routes/caretakerAdmin.routes.js';
 
 app.use('/api/auth',      authRoutes);
 app.use('/api/users',     userRoutes);
-app.use('/api/bookings',  bookingRoutes);   // includes /confirm/:token
+app.use('/api/bookings', bookingRoutes);
 app.use('/api/alerts',    alertRoutes);
 app.use('/api/medical',   medicalRoutes);
 app.use('/api/admin',     adminRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/feedback',  feedbackRoutes);
 app.use('/api/chat',      chatRoutes);
+app.use('/api/caretakers', caretakerAdminRoutes);
+
 
 /* ---------- health check ---------- */
 app.get('/', (_req, res) => res.send('API is running…'));
@@ -106,3 +112,6 @@ mongoose
     console.error('DB connection error:', err.message);
     process.exit(1);
   });
+
+
+  app.use('/api/ambulances', ambulanceRoutes);
