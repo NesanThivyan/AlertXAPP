@@ -205,24 +205,59 @@ export const getAllCaretakerBookings = async (req, res) => {
 };
 
 // POST create new caretaker booking
+import mongoose from 'mongoose';
+
 export const createCaretakerBooking = async (req, res) => {
   try {
-    const { userId, caretakerId, date, time, notes } = req.body;
+    const {
+      userId,
+      caretakerId,
+      date,
+      time,
+      notes,
+      place,
+      patientAge,
+      phoneNumber,
+      yourName,
+    } = req.body;
 
+    // Basic validation
+    if (!userId || !caretakerId || !date || !time) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    // ObjectId validation
+    if (
+      !mongoose.Types.ObjectId.isValid(userId) ||
+      !mongoose.Types.ObjectId.isValid(caretakerId)
+    ) {
+      return res.status(400).json({ message: 'Invalid userId or caretakerId' });
+    }
+
+    // Create booking with all fields
     const booking = await CaretakerBooking.create({
       user: userId,
       caretaker: caretakerId,
       date,
       time,
       notes,
+      place,
+      patientAge,
+      phoneNumber,
+      yourName,
     });
 
-    res.status(201).json({ success: true, data: booking });
+    // Populate user and caretaker for frontend use
+    const populatedBooking = await CaretakerBooking.findById(booking._id)
+      .populate('user', 'name email')
+      .populate('caretaker', 'name');
+
+    res.status(201).json({ success: true, data: populatedBooking });
   } catch (err) {
+    console.error("Booking creation error:", err);
     res.status(400).json({ message: 'Booking creation failed', error: err.message });
   }
 };
-
 // PUT update caretaker booking
 export const updateCaretakerBooking = async (req, res) => {
   try {

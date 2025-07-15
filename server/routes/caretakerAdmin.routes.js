@@ -58,16 +58,18 @@ router
 
 // ------------------- CARETAKER BOOKING CRUD -------------------
 
+// ...existing code...
+
 // Get all bookings
-router.get('/bookings', protect, isCaretaker, getAllCaretakerBookings);
+router.get('/bookings', protect, getAllCaretakerBookings);
 
 // Create a booking
-router.post('/bookings', protect, isCaretaker, createCaretakerBooking);
+router.post('/bookings', protect, createCaretakerBooking);
 
-// Update a booking
+// Update a booking (optional: keep isCaretaker for admin/caretaker only)
 router.put('/bookings/:id', protect, isCaretaker, updateCaretakerBooking);
 
-// Delete a booking
+// Delete a booking (optional: keep isCaretaker for admin/caretaker only)
 router.delete('/bookings/:id', protect, isCaretaker, deleteCaretakerBooking);
 
 export default router;

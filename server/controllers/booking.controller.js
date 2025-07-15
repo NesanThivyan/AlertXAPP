@@ -1,18 +1,16 @@
-// controllers/booking.controller.js
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import Booking from '../models/booking.model.js';
-import Ambulance from '../models/ambulance.model.js';       // if you need to query it
+import Ambulance from '../models/ambulance.model.js';
 import {
   notifyBookingStatusUpdate
 } from '../server.js';
-import sendBookingConfirmationEmail   from '../utils/sendBookingConfirmationEmail.js';
-import sendBookingRejectionEmail      from '../utils/sendBookingRejectionEmail.js';
+import sendBookingConfirmationEmail from '../utils/sendBookingConfirmationEmail.js';
+import sendBookingRejectionEmail from '../utils/sendBookingRejectionEmail.js';
 
 /* ────────── util ────────── */
 const isNonEmpty = (v) => typeof v === 'string' && v.trim().length > 0;
 
-/* validate and normalise incoming booking body */
 function validateBooking(body) {
   const {
     pickupLocation, dropoffLocation, emergencyType,
@@ -20,10 +18,9 @@ function validateBooking(body) {
     contactNumber, date, hospital, name,
   } = body;
 
-  /* text fields */
-  if (![ pickupLocation, dropoffLocation, emergencyType, patientName,
-         patientCondition, contactNumber, hospital, name ]
-        .every(isNonEmpty)) {
+  if (![pickupLocation, dropoffLocation, emergencyType, patientName,
+    patientCondition, contactNumber, hospital, name]
+    .every(isNonEmpty)) {
     return { ok: false, message: 'All text fields are required.' };
   }
 
@@ -69,24 +66,23 @@ export const createBooking = async (req, res) => {
     const populatedBooking = await Booking.findById(booking._id)
       .populate('user', 'name email');
 
-    /* realtime + email */
-    const io           = req.app.get('io');
+    const io = req.app.get('io');
     if (io) io.to('adminNotifications').emit('newBookingRequest', populatedBooking);
     notifyBookingStatusUpdate(userId, populatedBooking);
 
     if (populatedBooking.user?.email) {
       sendBookingConfirmationEmail({
-        to:        populatedBooking.user.email,
-        username:  populatedBooking.user.name,
+        to: populatedBooking.user.email,
+        username: populatedBooking.user.name,
         bookingId: populatedBooking._id,
-        date:      populatedBooking.date,
+        date: populatedBooking.date,
       }).catch(console.error);
     }
 
     res.status(201).json({
       success: true,
       message: 'Booking request created. Awaiting admin approval.',
-      data:    populatedBooking,
+      data: populatedBooking,
     });
   } catch (err) {
     console.error('createBooking →', err);
@@ -98,8 +94,8 @@ export const createBooking = async (req, res) => {
 export const getAllBookings = async (_req, res) => {
   try {
     const bookings = await Booking.find()
-      .populate({ path: 'user',               select: 'name email' })
-      .populate({ path: 'assignedAmbulance',  select: 'plate driver status' })
+      .populate({ path: 'user', select: 'name email' })
+      .populate({ path: 'assignedAmbulance', select: 'plate driver status' })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -111,49 +107,42 @@ export const getAllBookings = async (_req, res) => {
 };
 
 /* ────────── ADMIN – STATUS UPDATE ────────── */
-
 export const updateBookingStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
-    const allowed = ['accepted', 'rejected', 'completed', 'cancelled'];
+    const allowed = ['pending', 'accepted', 'assigned', 'dispatched', 'arrived', 'pickedup', 'rejected', 'completed', 'cancelled'];
     if (!allowed.includes(status))
       return res.status(400).json({ success: false, message: 'Invalid status value.' });
 
-    const booking = await Booking.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true, runValidators: true }
-    ).populate('user', 'name email');
-
+    const booking = await Booking.findById(id);
     if (!booking)
       return res.status(404).json({ success: false, message: 'Booking not found.' });
 
-    notifyBookingStatusUpdate(booking.user._id, booking);
-
-    if (booking.user?.email) {
-      if (status === 'accepted') {
-        await sendConfirmationMail(booking.user.email, booking)
-          .catch((e) => console.error('Mail send failed:', e));
-      } else if (status === 'rejected') {
-        await sendBookingRejectionEmail({
-          to: booking.user.email,
-          username: booking.user.name,
-          bookingId: booking._id,
-          date: booking.date,
-        }).catch((e) => console.error('Mail send failed:', e));
-      }
+    // Set bookingTime if status is "Accepted" and it's not already set
+    if (status === 1 && !booking.bookingTime) {
+      booking.bookingTime = new Date();
     }
 
-    res.json({ success: true, data: booking });
+    booking.status = status;
+    await booking.save();
+
+    const populatedBooking = await Booking.findById(id)
+      .populate('user', 'name email')
+      .populate('assignedAmbulance', 'plate driver status');
+
+    const io = req.app.get('io');
+    if (io && populatedBooking.user?._id) {
+      io.to(populatedBooking.user._id.toString()).emit('bookingStatusUpdated', populatedBooking);
+    }
+
+    res.json({ success: true, data: populatedBooking });
   } catch (err) {
     console.error('updateBookingStatus error →', err);
     res.status(500).json({ success: false, message: 'Failed to update status.', error: err.message });
   }
 };
-
-
 
 /* ────────── ADMIN – CRUD HELPERS ────────── */
 export const getBookingById = async (req, res) => {
@@ -168,23 +157,6 @@ export const getBookingById = async (req, res) => {
     res.json({ success: true, data: booking });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to fetch.', error: err.message });
-  }
-};
-
-export const updateBooking = async (req, res) => {
-  try {
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
-
-    if (!booking)
-      return res.status(404).json({ success: false, message: 'Booking not found.' });
-
-    res.json({ success: true, data: booking });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Failed to update.', error: err.message });
   }
 };
 

@@ -91,7 +91,7 @@ app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/feedback',  feedbackRoutes);
 app.use('/api/chat',      chatRoutes);
 app.use('/api/caretakers', caretakerAdminRoutes);
-
+ app.use('/api/ambulances', ambulanceRoutes);
 
 /* ---------- health check ---------- */
 app.get('/', (_req, res) => res.send('API is running…'));
@@ -114,4 +114,4 @@ mongoose
   });
 
 
-  app.use('/api/ambulances', ambulanceRoutes);
+ 

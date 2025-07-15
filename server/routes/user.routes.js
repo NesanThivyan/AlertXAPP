@@ -2,14 +2,14 @@ import express from "express";
 import {
   getProfile,            // GET  /api/users/profile/:id        – user fetches own profile
   updateProfile,         // PUT  /api/users/profile/:id        – user edits own profile
-  deleteAccount          // DELETE /api/users/delete/:id       – user deletes own account
+  deleteAccount,         // DELETE /api/users/delete/:id       – user deletes own account
 } from "../controllers/user.controller.js";
 
 import {
   updateUserDetails,     // PUT  /api/users/:id/details        – user edits own details
   getUserDetailsByAdmin  // GET  /api/users/:id/details        – admin fetches any user's details
 } from "../controllers/userdetails.controller.js";
-
+import { getCurrentProfile } from '../controllers/user.controller.js';
 import { updateUserMedical } from "../controllers/usermedical.controller.js";
 import { updateGuardianDetails } from "../controllers/userguardians.controller.js";
 
@@ -35,5 +35,5 @@ router.put("/:id/details", protect, updateUserDetails);
 /* ───────────────── Medical & Guardian ───────────────── */
 router.patch("/:id/medical", protect, updateUserMedical);  // Changed to PATCH for partial updates
 router.patch("/:id/guardian", protect, updateGuardianDetails);  // Changed to PATCH
-
+router.get('/profile', protect, getCurrentProfile);
 export default router;

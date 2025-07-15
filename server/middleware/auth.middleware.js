@@ -67,3 +67,17 @@ export const isCaretaker = (req, res, next) => {
   next();
 };
 
+// GET /api/user/profile
+export const getCurrentProfile = async (req, res) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: "Not authenticated" });
+  }
+  try {
+    const user = await User.findById(req.user._id).select("-password");
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    res.status(200).json({ success: true, data: user });
+  } catch {
+    res.status(400).json({ success: false, message: "Invalid user ID" });
+  }
+};
+

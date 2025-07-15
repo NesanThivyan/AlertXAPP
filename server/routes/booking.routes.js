@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { protect, isAdmin } from '../middleware/auth.middleware.js';
 import {
   createBooking,
-  updateBooking,
+  // updateBooking,
   updateBookingStatus,
   // acceptBooking,   // no longer needed separately
   deleteBooking,
@@ -16,7 +16,7 @@ const router = Router();
 router.post('/', protect, createBooking);
 
 // ADMIN: general edit booking
-router.put('/:id', protect, isAdmin, updateBooking);
+// router.put('/:id', protect, isAdmin, updateBooking);
 
 // ADMIN: update booking status (accepted, rejected, completed, cancelled)
 router.put('/:id/status', protect, isAdmin, updateBookingStatus);
