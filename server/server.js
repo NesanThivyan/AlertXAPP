@@ -1,3 +1,8 @@
+// ...existing code...
+import stripeSessionRoutes from './routes/stripeSession.routes.js';
+// ...existing code...
+// After app is defined
+import stripeWebhookRoutes from './routes/stripeWebhook.routes.js';
 /* ────────────────────────────────────────────────────────────
    server.js  (backend entry point)
    ──────────────────────────────────────────────────────────── */
@@ -78,8 +83,11 @@ import adminRoutes    from './routes/admin.routes.js';
 import hospitalRoutes from './routes/hospital.routes.js';
 import feedbackRoutes from './routes/feedback.routes.js';
 import chatRoutes     from './routes/chat.routes.js';
+
 import medicalRoutes  from './routes/medical.routes.js';
 import caretakerAdminRoutes from './routes/caretakerAdmin.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
+import adminPaymentRoutes from './routes/adminPayment.routes.js';
 
 app.use('/api/auth',      authRoutes);
 app.use('/api/users',     userRoutes);
@@ -92,6 +100,12 @@ app.use('/api/feedback',  feedbackRoutes);
 app.use('/api/chat',      chatRoutes);
 app.use('/api/caretakers', caretakerAdminRoutes);
  app.use('/api/ambulances', ambulanceRoutes);
+app.use('/api/admin-payments', adminPaymentRoutes);
+app.use('/api/stripe-sessions', stripeSessionRoutes);
+
+// Stripe payment endpoints
+app.use('/api/payments', paymentRoutes);
+app.use('/api/stripe-webhook', stripeWebhookRoutes);
 
 /* ---------- health check ---------- */
 app.get('/', (_req, res) => res.send('API is running…'));

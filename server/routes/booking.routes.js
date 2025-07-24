@@ -8,12 +8,20 @@ import {
   deleteBooking,
   getAllBookings,
   getBookingById,
+  getUserBookings,
+  assignAmbulanceToBooking,
 } from '../controllers/booking.controller.js';
 
 const router = Router();
 
+// ADMIN: assign ambulance to booking
+router.put('/:id/assignAmbulance', protect, isAdmin, assignAmbulanceToBooking);
+
 // USER: create booking
 router.post('/', protect, createBooking);
+
+// USER: get booking history
+router.get('/user/history', protect, getUserBookings);
 
 // ADMIN: general edit booking
 // router.put('/:id', protect, isAdmin, updateBooking);

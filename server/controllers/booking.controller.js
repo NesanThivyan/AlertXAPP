@@ -1,3 +1,49 @@
+// ADMIN – ASSIGN AMBULANCE TO BOOKING
+export const assignAmbulanceToBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { ambulanceId } = req.body;
+
+    if (!ambulanceId) {
+      console.error('assignAmbulanceToBooking: Missing ambulanceId in request body');
+      return res.status(400).json({ success: false, message: 'Ambulance ID is required.' });
+    }
+
+    const booking = await Booking.findById(id);
+    if (!booking) {
+      console.error(`assignAmbulanceToBooking: Booking not found for id ${id}`);
+      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+
+    const ambulance = await Ambulance.findById(ambulanceId);
+    if (!ambulance) {
+      console.error(`assignAmbulanceToBooking: Ambulance not found for id ${ambulanceId}`);
+      return res.status(404).json({ success: false, message: 'Ambulance not found.' });
+    }
+
+    booking.assignedAmbulance = ambulanceId;
+    booking.status = 'assigned';
+    await booking.save();
+
+    const populatedBooking = await Booking.findById(id)
+      .populate('user', 'name email')
+      .populate('assignedAmbulance', 'plate driver status');
+
+    // Optionally, notify user via socket.io or email here
+    const io = req.app.get('io');
+    if (io && populatedBooking.user?._id) {
+      io.to(populatedBooking.user._id.toString()).emit('bookingStatusUpdated', populatedBooking);
+    }
+
+    res.json({ success: true, data: populatedBooking });
+  } catch (err) {
+    console.error('assignAmbulanceToBooking error →', err);
+    if (err && err.stack) {
+      console.error('Stack trace:', err.stack);
+    }
+    res.status(500).json({ success: false, message: 'Failed to assign ambulance.', error: err.message });
+  }
+};
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import Booking from '../models/booking.model.js';
@@ -169,5 +215,25 @@ export const deleteBooking = async (req, res) => {
     res.json({ success: true, message: 'Booking deleted.' });
   } catch (err) {
     res.status(500).json({ success: false, message: 'Failed to delete.', error: err.message });
+  }
+};
+
+// USER - GET BOOKINGS HISTORY
+export const getUserBookings = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated.' });
+    }
+
+    const bookings = await Booking.find({ user: userId })
+      .populate('assignedAmbulance', 'plate driver status')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: bookings });
+  } catch (err) {
+    console.error('getUserBookings →', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch user bookings.', error: err.message });
   }
 };
