@@ -45,23 +45,45 @@ export const login = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please enter email and password' });
         }
 
-        // Find user by email and include password for comparison
-        const user = await User.findOne({ email }).select('+password');
-        if (!user) {
-            // User not found
-            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        // Try User model first
+        let user = await User.findOne({ email }).select('+password');
+        if (user) {
+            const isMatch = await user.matchPassword(password);
+            if (!isMatch) {
+                return res.status(401).json({ success: false, message: 'Invalid credentials' });
+            }
+            // Send user token response
+            return sendTokenResponse(user, 200, res);
         }
 
-        // Check if the provided password matches the stored hashed password
-        const isMatch = await user.matchPassword(password);
-        if (!isMatch) {
-            // Passwords do not match
-            return res.status(401).json({ success: false, message: 'Invalid credentials' });
+        // If not found in User, try Hospital model
+        const Hospital = (await import('../models/hospital.model.js')).default;
+        let hospital = await Hospital.findOne({ email }).select('+password');
+        if (hospital) {
+            const bcrypt = await import('bcryptjs');
+            const isMatch = await bcrypt.compare(password, hospital.password);
+            if (!isMatch) {
+                return res.status(401).json({ success: false, message: 'Invalid credentials' });
+            }
+            // Build token
+            const token = jwt.sign({ id: hospital._id, role: hospital.role }, process.env.JWT_SECRET || 'your_secret', { expiresIn: '7d' });
+            const { password: _, ...hospitalData } = hospital._doc;
+            return res.status(200).json({
+                success: true,
+                token,
+                role: hospital.role,
+                user: {
+                    id: hospital._id,
+                    name: hospital.name,
+                    email: hospital.email,
+                    role: hospital.role
+                },
+                data: hospitalData
+            });
         }
 
-        // Send a successful token response (status 200 OK)
-        sendTokenResponse(user, 200, res);
-
+        // If not found in either
+        return res.status(401).json({ success: false, message: 'Invalid credentials' });
     } catch (error) {
         // Log and send 500 for server errors during login
         console.error('Login error:', error);

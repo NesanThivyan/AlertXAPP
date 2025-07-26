@@ -2,7 +2,7 @@
 import stripeSessionRoutes from './routes/stripeSession.routes.js';
 // ...existing code...
 // After app is defined
-import stripeWebhookRoutes from './routes/stripeWebhook.routes.js';
+import paymentWebhookRoutes from './routes/paymentWebhook.routes.js';
 /* ────────────────────────────────────────────────────────────
    server.js  (backend entry point)
    ──────────────────────────────────────────────────────────── */
@@ -66,7 +66,7 @@ io.on('connection', socket => {
     console.log(`Socket disconnected: ${socket.id}`)
   );
 });
-
+ app.use('/api/payments',paymentWebhook);
 /* ---------- middleware ---------- */
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -75,6 +75,7 @@ app.use(cors({ origin: CLIENT_URL, credentials: true }));
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 
 /* ---------- routes ---------- */
+import paymentWebhook from './routes/paymentWebhook.routes.js'
 import authRoutes     from './routes/auth.routes.js';
 import userRoutes     from './routes/user.routes.js';
 import bookingRoutes  from './routes/booking.routes.js';
@@ -105,7 +106,7 @@ app.use('/api/stripe-sessions', stripeSessionRoutes);
 
 // Stripe payment endpoints
 app.use('/api/payments', paymentRoutes);
-app.use('/api/stripe-webhook', stripeWebhookRoutes);
+// app.use('/api/stripe-webhook', stripeWebhookRoutes);
 
 /* ---------- health check ---------- */
 app.get('/', (_req, res) => res.send('API is running…'));

@@ -16,6 +16,12 @@ export const createAlert = async (req, res) => {
             userPhone: user.phone
         });
 
+        // Emit real-time alert event to admin dashboard
+        const io = req.app.get('io');
+        if (io) {
+            io.to('adminNotifications').emit('newUserAlert', alert);
+        }
+
         res.status(201).json({ success: true, message: 'Alert sent', data: alert });
     } catch (error) {
         res.status(422).json({ success: false, message: 'Missing required data', error: error.message });

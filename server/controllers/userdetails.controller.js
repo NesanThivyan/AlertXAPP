@@ -90,7 +90,16 @@ export const getUserDetailsByAdmin = async (req, res) => {
                 phone: user.phone,
                 nic: user.nic,
                 work: user.work,
-                // You can include more fields like guardian details, etc.
+                medicalDetails: user.medical ? {
+                    bloodGroup: user.medical.bloodGroup || '',
+                    pressure: user.medical.pressure || '',
+                    sugarLevel: user.medical.sugarLevel || ''
+                } : null,
+                guardian: user.guardian ? {
+                    name: user.guardian.name || '',
+                    phone: user.guardian.phone || '',
+                    relationship: user.guardian.relationship || ''
+                } : null
             }
         });
     } catch (error) {

@@ -9,6 +9,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your_secret';
 // @access  Admin
 export const createHospital = async (req, res) => {
     try {
+        let { role } = req.body;
+        if (!role) {
+            req.body.role = 'admin';
+        }
+        // Pass plain password, let pre-save hook hash it
         const hospital = await Hospital.create(req.body);
         res.status(201).json({ success: true, data: hospital });
     } catch (error) {

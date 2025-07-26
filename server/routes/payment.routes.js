@@ -5,6 +5,9 @@ const router = express.Router();
 import Stripe from "stripe";
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY); // Always use the real key from .env
 
+// Payment controller
+import * as paymentController from "../controllers/payment.controller.js";
+
 // Stripe Checkout Session endpoint (recommended for redirect-based payment)
 router.post("/create-checkout-session", async (req, res) => {
   const { amount, bookingId, userEmail } = req.body;
@@ -55,3 +58,15 @@ router.post("/create-payment-intent", async (req, res) => {
 });
 
 export default router;
+
+// --- RESTful Payment API ---
+// Get all payments
+router.get("/", paymentController.getAllPayments);
+// Get payment by ID
+router.get("/:id", paymentController.getPaymentById);
+// Create payment
+router.post("/", paymentController.createPayment);
+// Update payment
+router.put("/:id", paymentController.updatePayment);
+// Delete payment
+router.delete("/:id", paymentController.deletePayment);
